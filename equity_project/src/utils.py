@@ -2,7 +2,9 @@ import datetime as dt
 import json
 from typing import Dict
 
+from itertools import combinations
 import pandas as pd
+import numpy as np
 from yaml import safe_load
 
 
@@ -91,3 +93,79 @@ def three_barrier(close, ptSl=[1, 1], rolling_n=50, scaling_factor=2.0):
     )
 
     return target
+
+
+class PurgedKFold:
+    """
+    K-Fold cross-validator with purging and embargo for time series.
+    Args:
+    n_splits : int
+    purge_days : int
+    embargo_days : int
+    """
+    
+    def __init__(self, n_splits: int = 5, purge_days: int = 5, embargo_days: int = 2):
+        self.n_splits = n_splits
+        self.purge_days = purge_days
+        self.embargo_days = embargo_days
+    
+    def split(self, X, y=None, groups=None):
+        """
+        Generate idx for train и validation.
+        Returns:
+        generator of (train_indices, test_indices)
+        """
+        n_samples = len(X)
+        indices = np.arange(n_samples)
+        fold_size = n_samples // self.n_splits
+        
+        for i in range(self.n_splits):
+            val_start = i * fold_size
+            val_end = (i + 1) * fold_size if i < self.n_splits - 1 else n_samples
+            test_idx = indices[val_start:val_end]
+            
+            train_end = val_start - self.purge_days
+            train_idx = indices[:max(0, train_end)]
+            
+            if self.embargo_days > 0 and i > 0:
+                embargo_end = val_start - self.embargo_days
+                train_idx = train_idx[train_idx < embargo_end]
+            
+            if len(train_idx) == 0:
+                train_idx = np.array([], dtype=int)
+            
+            yield train_idx, test_idx
+    
+    def get_n_splits(self):
+        return self.n_splits
+
+
+def combinatorial_purged_cv(X, y, n_splits: int = 5, purge_days: int = 5, embargo_days: int = 2):
+    """
+    Combinatorial Purged Cross-Validation.   
+    Returns:
+    list of (train_indices, test_indices) tuples
+    """
+    
+    n_samples = len(X)
+    indices = np.arange(n_samples)
+    fold_size = n_samples // n_splits
+    
+    folds = []
+    for i in range(n_splits):
+        start = i * fold_size
+        end = (i + 1) * fold_size if i < n_splits - 1 else n_samples
+        folds.append(indices[start:end])
+    
+    cv_pairs = []
+    for test_combo in combinations(range(n_splits), n_splits // 2):
+        test_idx = np.concatenate([folds[i] for i in test_combo])
+        train_idx = np.concatenate([folds[i] for i in range(n_splits) if i not in test_combo])
+        
+        min_test_date = min(test_idx)
+        train_idx = train_idx[train_idx < (min_test_date - purge_days)]
+        
+        if len(train_idx) > 0:
+            cv_pairs.append((train_idx, test_idx))
+    
+    return cv_pairs

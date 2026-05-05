@@ -124,7 +124,11 @@ def get_raw_data():
 
     # для этих акций yfinance предоставлет битые данные (нулевые или околонулевые цены для некоторых периодов в прошлом, которые ломают алгоритм)
     # можете изучить их котировки и если yfinance цены истинны, то оставить тикеры в выборке, пока же мы их удалим
-    for trash_ticker in ("DEC", "USBC", "CPWR", "TNB", "APP", "BMC", "SBNY"):
+    for trash_ticker in ("DEC", "USBC", "CPWR", "TNB", "APP", "BMC", "SBNY",
+                     "ENRNQ", "LEHMQ", "SUNEQ", "WAMUQ", "AAMRQ", "DALRQ",
+                     "BHMSQ", "CCTYQ", "DCNAQ", "DPHIQ", "EKDKQ", "FLMIQ",
+                     "GAPTQ", "MTLQQ", "WCOEQ", "WNDXQ", "UAWGQ", "ANRZQ",
+                     "BTUUQ", "CPNLQ", "OWENQ", "RSHCQ"):
         first_appearance_dict.pop(trash_ticker)
 
     TICKERS = list(first_appearance_dict.keys())

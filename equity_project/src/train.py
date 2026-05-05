@@ -1,53 +1,46 @@
 import os
-from pathlib import Path
-
 import joblib
 import pandas as pd
-from catboost import CatBoostClassifier
-from sklearn.model_selection import train_test_split
+import lightgbm as lgb
+from pathlib import Path
 
 project_path = Path(__file__).parent.parent
 
-
-def instantiate_model():
-    """Задаем параметры модели для обучения
-
-    Returns:
-        CatBoostClassifier: Инициированная ML модель
-    """
-    model = CatBoostClassifier(
-        auto_class_weights="Balanced",
-        loss_function="MultiClass",
-        use_best_model=True,
-        eval_metric="MultiClass",
-        early_stopping_rounds=50,
-    )
-    return model
-
-
 def train():
-    """
-    Запускаем обучении стратегии и сохраняем обученную модель
-    """
-    os.makedirs(project_path.as_posix() + "/models", exist_ok=True)
-
-    # считываем обучающие данные
-    X = pd.read_parquet(project_path.as_posix() + "/data/processed/X_train.parquet")
-    y = pd.read_parquet(project_path.as_posix() + "/data/processed/y_train.parquet")
-
-    # в этом моменте уместно прописать более хитрую схему валидации
-    X_train, X_val, y_train, y_val = train_test_split(
-        X, y, shuffle=False, test_size=0.3
+    X_train = pd.read_parquet(project_path / "data/processed/X_train.parquet")
+    y_train = pd.read_parquet(project_path / "data/processed/y_train.parquet")
+    
+    if isinstance(y_train, pd.DataFrame):
+        y_train = y_train.iloc[:, 0]
+    
+    print(f"X_train shape: {X_train.shape}")
+    print(f"y_train shape: {y_train.shape}")
+    print(f"Distribution: {y_train.value_counts().sort_index().to_dict()}")
+    
+    model = lgb.LGBMClassifier(
+        objective='multiclass',
+        num_class=3,
+        learning_rate=0.05,
+        n_estimators=100,
+        max_depth=7,
+        num_leaves=31,
+        reg_alpha=0.01,
+        reg_lambda=0.01,
+        random_state=42,
+        verbose=100
     )
-
-    model = instantiate_model()
-
-    # Обучаем модель с оптимальным подбором числа деревьев исходя из качества на валидации
-    model.fit(y=y_train, X=X_train, eval_set=(X_val, y_val))
-
-    # сохраняем обученную модель
-    joblib.dump(model, project_path.as_posix() + "/models/model.joblib")
-
+    
+    model.fit(X_train, y_train)
+    
+    os.makedirs(project_path / "models", exist_ok=True)
+    joblib.dump(model, project_path / "models/model.joblib")
+    
+    importance = pd.DataFrame({
+        'feature': X_train.columns,
+        'importance': model.feature_importances_
+    }).sort_values('importance', ascending=False)
+    print("\nFeature importance:")
+    print(importance)
 
 if __name__ == "__main__":
     train()
